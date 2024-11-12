@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Form Input</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl">
+      <h2 class="text-2xl font-semibold text-center text-gray-800 mb-6">
+        Sentimen Analysis
+      </h2>
+
+      <form id="sentimentForm" class="space-y-4">
+        <div>
+          <label for="tweet" class="block text-sm font-medium text-gray-700 mb-1"
+            >Tweet</label
+          >
+          <input
+            type="text"
+            id="tweet"
+            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="Masukkan Tweet yang akan dianalysis"
+            required
+          />
+        </div>
+
+        <div class="flex justify-between">
+          <div>
+            <div class="Analysis">
+              Prediksi Sentimen :
+              <span id="predictedSentiment" class="italic font-semibold"></span>
+            </div>
+            <div class="Analysis">
+              Sentimen Manual :
+              <span id="manualSentiment" class="italic font-semibold"></span>
+            </div>
+          </div>
+          <div class="Analysis">
+            Aspek : <span id="aspects" class="italic font-semibold"></span>
+          </div>
+        </div>
+        <button
+          type="submit"
+          class="w-full bg-indigo-500 text-white py-2 rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          Kirim
+        </button>
+      </form>
+    </div>
+
+    <script>
+      document.getElementById('sentimentForm').addEventListener('submit', async function (e) {
+        e.preventDefault(); // Prevent the form from refreshing the page
+
+        // Get the value from the input field
+        const tweet = document.getElementById('tweet').value;
+
+        // Send a POST request using fetch to analyze sentiment
+        try {
+          const response = await fetch('http://localhost:5000/analyze_sentiment', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: tweet }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+
+          // Fetch the latest data from the SPARQL endpoint
+          const sparqlResponse = await fetch('http://localhost:3030/sentimen/sparql', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/sparql-query',
+              'Accept': 'application/json'
+            },
+            body: `
+              PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+              PREFIX d: <http://www.semanticweb.org/arima/ontologies/2024/10/untitled-ontology-6#>
+
+              SELECT *
+              WHERE {
+                ?tweet rdf:type d:Tweet.
+                ?tweet d:SentimenManual ?manual.
+                ?tweet d:Sentimen ?svm.
+                ?tweet d:Aspek ?aspek.
+              }
+            `
+          });
+
+          if (!sparqlResponse.ok) {
+            throw new Error('Failed to fetch SPARQL data');
+          }
+
+          const sparqlData = await sparqlResponse.json();
+          const results = sparqlData.results.bindings;
+
+          // Get the last entry if there are results
+          if (results.length > 0) {
+            const lastResult = results[results.length - 1];
+            console.log('Last result from SPARQL:', lastResult);
+
+            // Display the last entry data
+            document.getElementById('predictedSentiment').textContent = lastResult.svm.value;
+            document.getElementById('manualSentiment').textContent = lastResult.manual.value;
+            document.getElementById('aspects').textContent = lastResult.aspek.value;
+          } else {
+            alert('No results found in SPARQL database.');
+          }
+
+        } catch (error) {
+          console.error('Error:', error);
+          alert('Terjadi kesalahan saat mengirim data. Cek konsol untuk detail lebih lanjut.');
+        }
+      });
+    </script>
+  </body>
+</html>
